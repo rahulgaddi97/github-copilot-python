@@ -62,6 +62,46 @@ def test_new_game_passes_requested_clues(client, monkeypatch):
     assert response.get_json() == {'puzzle': puzzle}
 
 
+@pytest.mark.parametrize('difficulty, expected_clues', [
+    ('easy', 40),
+    ('medium', 32),
+    ('hard', 24),
+])
+def test_new_game_maps_difficulty_to_clues(client, monkeypatch, difficulty, expected_clues):
+    puzzle = [[0 for _ in range(9)] for _ in range(9)]
+    solution = [[1 for _ in range(9)] for _ in range(9)]
+    calls = []
+
+    def fake_generate_puzzle(clues):
+        calls.append(clues)
+        return puzzle, solution
+
+    monkeypatch.setattr(app.sudoku_logic, 'generate_puzzle', fake_generate_puzzle)
+
+    response = client.get(f'/new?difficulty={difficulty}')
+
+    assert response.status_code == 200
+    assert response.get_json() == {'puzzle': puzzle}
+    assert calls == [expected_clues]
+
+
+def test_new_game_rejects_unknown_difficulty(client, monkeypatch):
+    generate_called = False
+
+    def fake_generate_puzzle(clues):
+        nonlocal generate_called
+        generate_called = True
+        return [], []
+
+    monkeypatch.setattr(app.sudoku_logic, 'generate_puzzle', fake_generate_puzzle)
+
+    response = client.get('/new?difficulty=expert')
+
+    assert response.status_code == 400
+    assert response.get_json() == {'error': 'Invalid difficulty'}
+    assert generate_called is False
+
+
 def test_check_solution_returns_error_before_new_game(client):
     response = client.post('/check', json={'board': []})
 

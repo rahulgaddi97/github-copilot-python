@@ -1,3 +1,5 @@
+import pytest
+
 import sudoku_logic
 
 
@@ -118,9 +120,12 @@ def test_generate_puzzle_returns_puzzle_and_valid_solution_with_requested_clues(
     )
 
 
-def test_generate_puzzle_has_exactly_one_solution_matching_returned_solution():
-    puzzle, solution = sudoku_logic.generate_puzzle(clues=40)
+@pytest.mark.parametrize('clues', [40, 32, 24])
+def test_generate_puzzle_supports_unique_difficulty_clue_counts(clues):
+    puzzle, solution = sudoku_logic.generate_puzzle(clues=clues)
 
+    filled_cells = sum(cell != sudoku_logic.EMPTY for row in puzzle for cell in row)
+    assert filled_cells == clues
     assert sudoku_logic.count_solutions(puzzle) == 1
     assert is_valid_solution(solution)
     assert all(
