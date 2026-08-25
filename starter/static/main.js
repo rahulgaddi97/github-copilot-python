@@ -1,7 +1,104 @@
 // Client-side rendering and interaction for the Flask-backed Sudoku
 const SIZE = 9;
+const SCORE_STORAGE_KEY = 'sudokuTopScores';
+const THEME_STORAGE_KEY = 'sudokuTheme';
 let puzzle = [];
 let hintsUsed = 0;
+let timerInterval = null;
+let timerStartedAt = null;
+let elapsedSeconds = 0;
+let gameCompleted = false;
+
+function getStoredTheme() {
+  const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+  return storedTheme === 'dark' || storedTheme === 'light' ? storedTheme : null;
+}
+
+function getSystemTheme() {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function getInitialTheme() {
+  return getStoredTheme() || getSystemTheme();
+}
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  const toggle = document.getElementById('theme-toggle');
+  const isDark = theme === 'dark';
+  toggle.setAttribute('aria-pressed', String(isDark));
+  toggle.innerText = isDark ? 'Light mode' : 'Dark mode';
+}
+
+function toggleTheme() {
+  const nextTheme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+  applyTheme(nextTheme);
+}
+
+function formatTime(seconds) {
+  const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
+  const remainingSeconds = (seconds % 60).toString().padStart(2, '0');
+  return `${minutes}:${remainingSeconds}`;
+}
+
+function updateTimerDisplay() {
+  document.getElementById('timer').innerText = `Time: ${formatTime(elapsedSeconds)}`;
+}
+
+function stopTimer() {
+  if (timerInterval !== null) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+  if (timerStartedAt !== null) {
+    elapsedSeconds = Math.floor((Date.now() - timerStartedAt) / 1000);
+  }
+  updateTimerDisplay();
+  timerStartedAt = null;
+}
+
+function startTimer() {
+  stopTimer();
+  elapsedSeconds = 0;
+  timerStartedAt = Date.now();
+  updateTimerDisplay();
+  timerInterval = setInterval(() => {
+    elapsedSeconds = Math.floor((Date.now() - timerStartedAt) / 1000);
+    updateTimerDisplay();
+  }, 1000);
+}
+
+function loadScores() {
+  try {
+    const storedScores = JSON.parse(localStorage.getItem(SCORE_STORAGE_KEY) || '[]');
+    return Array.isArray(storedScores) ? storedScores : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function saveScore(score) {
+  const scores = [...loadScores(), score]
+    .sort((first, second) => first.time - second.time)
+    .slice(0, 10);
+  localStorage.setItem(SCORE_STORAGE_KEY, JSON.stringify(scores));
+  renderScores(scores);
+}
+
+function renderScores(scores = loadScores()) {
+  const scoreboardBody = document.getElementById('scoreboard-body');
+  scoreboardBody.innerHTML = '';
+  scores.forEach((score, index) => {
+    const row = document.createElement('tr');
+    [index + 1, score.name, formatTime(score.time), score.difficulty, score.hintsUsed].forEach(value => {
+      const cell = document.createElement('td');
+      cell.textContent = value;
+      row.appendChild(cell);
+    });
+    scoreboardBody.appendChild(row);
+  });
+}
 
 function readBoard() {
   const inputs = document.getElementById('sudoku-board').getElementsByTagName('input');
@@ -66,6 +163,7 @@ function createBoardElement() {
       input.className = 'sudoku-cell';
       input.dataset.row = i;
       input.dataset.col = j;
+      input.setAttribute('aria-label', `Row ${i + 1}, column ${j + 1}`);
       input.addEventListener('input', (e) => validateCell(e.target));
       rowDiv.appendChild(input);
     }
@@ -96,12 +194,16 @@ function renderPuzzle(puz) {
 }
 
 async function newGame() {
+  stopTimer();
+  gameCompleted = false;
   const difficulty = document.getElementById('difficulty').value;
   const res = await fetch(`/new?difficulty=${encodeURIComponent(difficulty)}`);
   const data = await res.json();
   renderPuzzle(data.puzzle);
   hintsUsed = 0;
+  document.getElementById('hints-used').innerText = 'Hints used: 0';
   document.getElementById('message').innerText = '';
+  startTimer();
 }
 
 async function requestHint() {
@@ -123,7 +225,22 @@ async function requestHint() {
     input.disabled = true;
     input.className = 'sudoku-cell prefilled';
     hintsUsed = data.hints_used;
+    document.getElementById('hints-used').innerText = `Hints used: ${hintsUsed}`;
   }
+}
+
+function completeGame(difficulty) {
+  if (gameCompleted) return;
+  gameCompleted = true;
+  stopTimer();
+  const name = window.prompt('Enter your name for the Top 10 scoreboard:');
+  if (!name || !name.trim()) return;
+  saveScore({
+    name: name.trim(),
+    time: elapsedSeconds,
+    difficulty,
+    hintsUsed,
+  });
 }
 
 async function checkSolution() {
@@ -137,7 +254,7 @@ async function checkSolution() {
   const data = await res.json();
   const msg = document.getElementById('message');
   if (data.error) {
-    msg.style.color = '#d32f2f';
+    msg.className = 'message-error';
     msg.innerText = data.error;
     return;
   }
@@ -152,19 +269,23 @@ async function checkSolution() {
   }
   const complete = Array.from(inputs).every(input => input.value);
   if (incorrect.size === 0 && complete) {
-    msg.style.color = '#388e3c';
+    msg.className = 'message-success';
     msg.innerText = 'Congratulations! You solved it!';
+    completeGame(document.getElementById('difficulty').value);
   } else {
-    msg.style.color = '#d32f2f';
+    msg.className = 'message-error';
     msg.innerText = 'Some cells are incorrect.';
   }
 }
 
 // Wire buttons
 window.addEventListener('load', () => {
+  applyTheme(getInitialTheme());
+  document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
   document.getElementById('new-game').addEventListener('click', newGame);
   document.getElementById('hint').addEventListener('click', requestHint);
   document.getElementById('check-solution').addEventListener('click', checkSolution);
+  renderScores();
   // initialize
   newGame();
 });

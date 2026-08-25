@@ -3,23 +3,54 @@
 <head>
   <meta charset="utf-8">
   <title>Sudoku Game</title>
+  <script>
+    (() => {
+      const storedTheme = localStorage.getItem('sudokuTheme');
+      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.dataset.theme = storedTheme === 'dark' || storedTheme === 'light'
+        ? storedTheme
+        : systemTheme;
+    })();
+  </script>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
   <h1>Sudoku Game</h1>
-  <label for="difficulty">Difficulty:</label>
-  <select id="difficulty">
-    <option value="easy">Easy</option>
-    <option value="medium" selected>Medium</option>
-    <option value="hard">Hard</option>
-  </select>
+  <div class="top-controls">
+    <div class="difficulty-control">
+      <label for="difficulty">Difficulty:</label>
+      <select id="difficulty">
+        <option value="easy">Easy</option>
+        <option value="medium" selected>Medium</option>
+        <option value="hard">Hard</option>
+      </select>
+    </div>
+    <button id="theme-toggle" type="button" aria-pressed="false">Dark mode</button>
+  </div>
+  <div id="timer" aria-live="polite">Time: 00:00</div>
+  <div id="hints-used" aria-live="polite">Hints used: 0</div>
   <div id="sudoku-board"></div>
   <div class="controls">
     <button id="new-game">New Game</button>
     <button id="hint">Hint</button>
     <button id="check-solution">Check</button>
-    <span id="message"></span>
+    <span id="message" aria-live="polite"></span>
   </div>
+  <section id="scoreboard" aria-labelledby="scoreboard-heading">
+    <h2 id="scoreboard-heading">Top 10</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Rank</th>
+          <th>Name</th>
+          <th>Time</th>
+          <th>Difficulty</th>
+          <th>Hints</th>
+        </tr>
+      </thead>
+      <tbody id="scoreboard-body"></tbody>
+    </table>
+  </section>
   <script src="/static/main.js"></script>
 </body>
 </html>
