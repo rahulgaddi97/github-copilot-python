@@ -1,6 +1,57 @@
 // Client-side rendering and interaction for the Flask-backed Sudoku
 const SIZE = 9;
 let puzzle = [];
+let hintsUsed = 0;
+
+function readBoard() {
+  const inputs = document.getElementById('sudoku-board').getElementsByTagName('input');
+  const board = [];
+  for (let i = 0; i < SIZE; i++) {
+    board[i] = [];
+    for (let j = 0; j < SIZE; j++) {
+      const value = inputs[i * SIZE + j].value;
+      board[i][j] = value ? parseInt(value, 10) : 0;
+    }
+  }
+  return board;
+}
+
+function hasConflict(board, row, col, value) {
+  for (let index = 0; index < SIZE; index++) {
+    if (index !== col && board[row][index] === value) return true;
+    if (index !== row && board[index][col] === value) return true;
+  }
+  const startRow = row - row % 3;
+  const startCol = col - col % 3;
+  for (let boxRow = startRow; boxRow < startRow + 3; boxRow++) {
+    for (let boxCol = startCol; boxCol < startCol + 3; boxCol++) {
+      if ((boxRow !== row || boxCol !== col) && board[boxRow][boxCol] === value) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function refreshConflicts() {
+  const inputs = document.getElementById('sudoku-board').getElementsByTagName('input');
+  const board = readBoard();
+  for (const input of inputs) {
+    if (input.disabled) continue;
+    const value = input.value;
+    input.classList.remove('incorrect');
+    if (value && hasConflict(board, Number(input.dataset.row), Number(input.dataset.col), Number(value))) {
+      input.classList.add('incorrect');
+    }
+  }
+}
+
+function validateCell(input) {
+  if (input.disabled) return;
+  const value = input.value.replace(/[^1-9]/g, '');
+  input.value = value;
+  refreshConflicts();
+}
 
 function createBoardElement() {
   const boardDiv = document.getElementById('sudoku-board');
@@ -15,10 +66,7 @@ function createBoardElement() {
       input.className = 'sudoku-cell';
       input.dataset.row = i;
       input.dataset.col = j;
-      input.addEventListener('input', (e) => {
-        const val = e.target.value.replace(/[^1-9]/g, '');
-        e.target.value = val;
-      });
+      input.addEventListener('input', (e) => validateCell(e.target));
       rowDiv.appendChild(input);
     }
     boardDiv.appendChild(rowDiv);
@@ -52,25 +100,39 @@ async function newGame() {
   const res = await fetch(`/new?difficulty=${encodeURIComponent(difficulty)}`);
   const data = await res.json();
   renderPuzzle(data.puzzle);
+  hintsUsed = 0;
   document.getElementById('message').innerText = '';
+}
+
+async function requestHint() {
+  const res = await fetch('/hint', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({board: readBoard()})
+  });
+  const data = await res.json();
+  const msg = document.getElementById('message');
+  if (data.error) {
+    msg.innerText = data.error;
+    return;
+  }
+  const inputs = document.getElementById('sudoku-board').getElementsByTagName('input');
+  const input = inputs[data.row * SIZE + data.col];
+  if (!input.disabled && !input.value) {
+    input.value = data.value;
+    input.disabled = true;
+    input.className = 'sudoku-cell prefilled';
+    hintsUsed = data.hints_used;
+  }
 }
 
 async function checkSolution() {
   const boardDiv = document.getElementById('sudoku-board');
   const inputs = boardDiv.getElementsByTagName('input');
-  const board = [];
-  for (let i = 0; i < SIZE; i++) {
-    board[i] = [];
-    for (let j = 0; j < SIZE; j++) {
-      const idx = i * SIZE + j;
-      const val = inputs[idx].value;
-      board[i][j] = val ? parseInt(val, 10) : 0;
-    }
-  }
   const res = await fetch('/check', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({board})
+    body: JSON.stringify({board: readBoard()})
   });
   const data = await res.json();
   const msg = document.getElementById('message');
@@ -88,7 +150,8 @@ async function checkSolution() {
       inp.className = 'sudoku-cell incorrect';
     }
   }
-  if (incorrect.size === 0) {
+  const complete = Array.from(inputs).every(input => input.value);
+  if (incorrect.size === 0 && complete) {
     msg.style.color = '#388e3c';
     msg.innerText = 'Congratulations! You solved it!';
   } else {
@@ -100,6 +163,7 @@ async function checkSolution() {
 // Wire buttons
 window.addEventListener('load', () => {
   document.getElementById('new-game').addEventListener('click', newGame);
+  document.getElementById('hint').addEventListener('click', requestHint);
   document.getElementById('check-solution').addEventListener('click', checkSolution);
   // initialize
   newGame();

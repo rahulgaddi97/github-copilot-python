@@ -12,7 +12,8 @@ DIFFICULTY_CLUES = {
 # Keep a simple in-memory store for current puzzle and solution
 CURRENT = {
     'puzzle': None,
-    'solution': None
+    'solution': None,
+    'hints_used': 0,
 }
 
 @app.route('/')
@@ -31,7 +32,29 @@ def new_game():
     puzzle, solution = sudoku_logic.generate_puzzle(clues)
     CURRENT['puzzle'] = puzzle
     CURRENT['solution'] = solution
+    CURRENT['hints_used'] = 0
     return jsonify({'puzzle': puzzle})
+
+@app.route('/hint', methods=['POST'])
+def hint():
+    data = request.json or {}
+    board = data.get('board')
+    puzzle = CURRENT.get('puzzle')
+    solution = CURRENT.get('solution')
+    if solution is None or puzzle is None:
+        return jsonify({'error': 'No game in progress'}), 400
+
+    for row in range(sudoku_logic.SIZE):
+        for col in range(sudoku_logic.SIZE):
+            if puzzle[row][col] == sudoku_logic.EMPTY and board[row][col] == sudoku_logic.EMPTY:
+                CURRENT['hints_used'] += 1
+                return jsonify({
+                    'row': row,
+                    'col': col,
+                    'value': solution[row][col],
+                    'hints_used': CURRENT['hints_used'],
+                })
+    return jsonify({'error': 'No empty cells'}), 400
 
 @app.route('/check', methods=['POST'])
 def check_solution():
@@ -43,7 +66,7 @@ def check_solution():
     incorrect = []
     for i in range(sudoku_logic.SIZE):
         for j in range(sudoku_logic.SIZE):
-            if board[i][j] != solution[i][j]:
+            if board[i][j] != sudoku_logic.EMPTY and board[i][j] != solution[i][j]:
                 incorrect.append([i, j])
     return jsonify({'incorrect': incorrect})
 
