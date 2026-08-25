@@ -39,6 +39,80 @@ def fill_board(board):
                 return False
     return True
 
+def count_solutions(board):
+    working_board = deep_copy(board)
+    full_mask = (1 << SIZE) - 1
+    row_masks = [0] * SIZE
+    column_masks = [0] * SIZE
+    box_masks = [0] * SIZE
+
+    for row in range(SIZE):
+        for col in range(SIZE):
+            value = working_board[row][col]
+            if value == EMPTY:
+                continue
+            if value < 1 or value > SIZE:
+                return 0
+            value_mask = 1 << (value - 1)
+            box = (row // 3) * 3 + col // 3
+            if (
+                row_masks[row] & value_mask
+                or column_masks[col] & value_mask
+                or box_masks[box] & value_mask
+            ):
+                return 0
+            row_masks[row] |= value_mask
+            column_masks[col] |= value_mask
+            box_masks[box] |= value_mask
+
+    def search():
+        best_cell = None
+        best_candidates = 0
+        best_count = SIZE + 1
+
+        for row in range(SIZE):
+            for col in range(SIZE):
+                if working_board[row][col] != EMPTY:
+                    continue
+                box = (row // 3) * 3 + col // 3
+                candidates = full_mask & ~(
+                    row_masks[row] | column_masks[col] | box_masks[box]
+                )
+                candidate_count = candidates.bit_count()
+                if candidate_count == 0:
+                    return 0
+                if candidate_count < best_count:
+                    best_cell = (row, col, box)
+                    best_candidates = candidates
+                    best_count = candidate_count
+                    if candidate_count == 1:
+                        break
+            if best_count == 1:
+                break
+
+        if best_cell is None:
+            return 1
+
+        row, col, box = best_cell
+        solutions = 0
+        while best_candidates:
+            value_mask = best_candidates & -best_candidates
+            best_candidates &= best_candidates - 1
+            row_masks[row] |= value_mask
+            column_masks[col] |= value_mask
+            box_masks[box] |= value_mask
+            working_board[row][col] = value_mask.bit_length()
+            solutions += search()
+            working_board[row][col] = EMPTY
+            row_masks[row] &= ~value_mask
+            column_masks[col] &= ~value_mask
+            box_masks[box] &= ~value_mask
+            if solutions >= 2:
+                return 2
+        return solutions
+
+    return search()
+
 def remove_cells(board, clues):
     attempts = SIZE * SIZE - clues
     while attempts > 0:
@@ -49,9 +123,23 @@ def remove_cells(board, clues):
             attempts -= 1
 
 def generate_puzzle(clues=35):
-    board = create_empty_board()
-    fill_board(board)
-    solution = deep_copy(board)
-    remove_cells(board, clues)
-    puzzle = deep_copy(board)
-    return puzzle, solution
+    while True:
+        board = create_empty_board()
+        fill_board(board)
+        solution = deep_copy(board)
+        cells = [(row, col) for row in range(SIZE) for col in range(SIZE)]
+        random.shuffle(cells)
+        filled_cells = SIZE * SIZE
+
+        for row, col in cells:
+            if filled_cells <= clues:
+                break
+            value = board[row][col]
+            board[row][col] = EMPTY
+            if count_solutions(board) != 1:
+                board[row][col] = value
+            else:
+                filled_cells -= 1
+
+        if filled_cells == clues:
+            return deep_copy(board), solution

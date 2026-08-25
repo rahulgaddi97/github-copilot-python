@@ -49,6 +49,42 @@ def test_is_safe_rejects_row_column_and_box_conflicts():
     assert sudoku_logic.is_safe(board, 1, 1, 4) is True
 
 
+def test_count_solutions_returns_zero_for_invalid_board():
+    board = sudoku_logic.create_empty_board()
+    board[0][0] = 1
+    board[0][1] = 1
+
+    assert sudoku_logic.count_solutions(board) == 0
+
+
+def test_count_solutions_returns_one_for_completed_board():
+    board = [
+        [5, 3, 4, 6, 7, 8, 9, 1, 2],
+        [6, 7, 2, 1, 9, 5, 3, 4, 8],
+        [1, 9, 8, 3, 4, 2, 5, 6, 7],
+        [8, 5, 9, 7, 6, 1, 4, 2, 3],
+        [4, 2, 6, 8, 5, 3, 7, 9, 1],
+        [7, 1, 3, 9, 2, 4, 8, 5, 6],
+        [9, 6, 1, 5, 3, 7, 2, 8, 4],
+        [2, 8, 7, 4, 1, 9, 6, 3, 5],
+        [3, 4, 5, 2, 8, 6, 1, 7, 9],
+    ]
+
+    assert sudoku_logic.count_solutions(board) == 1
+
+
+def test_count_solutions_stops_after_finding_multiple_solutions():
+    board = sudoku_logic.create_empty_board()
+
+    assert sudoku_logic.count_solutions(board) == 2
+
+
+def test_count_solutions_returns_zero_for_invalid_completed_board():
+    board = [[1 for _ in range(sudoku_logic.SIZE)] for _ in range(sudoku_logic.SIZE)]
+
+    assert sudoku_logic.count_solutions(board) == 0
+
+
 def test_fill_board_creates_a_valid_solution():
     board = sudoku_logic.create_empty_board()
 
@@ -74,6 +110,18 @@ def test_generate_puzzle_returns_puzzle_and_valid_solution_with_requested_clues(
     assert len(solution) == sudoku_logic.SIZE
     assert all(len(row) == sudoku_logic.SIZE for row in solution)
     assert filled_cells == 35
+    assert is_valid_solution(solution)
+    assert all(
+        puzzle[row][col] in (sudoku_logic.EMPTY, solution[row][col])
+        for row in range(sudoku_logic.SIZE)
+        for col in range(sudoku_logic.SIZE)
+    )
+
+
+def test_generate_puzzle_has_exactly_one_solution_matching_returned_solution():
+    puzzle, solution = sudoku_logic.generate_puzzle(clues=40)
+
+    assert sudoku_logic.count_solutions(puzzle) == 1
     assert is_valid_solution(solution)
     assert all(
         puzzle[row][col] in (sudoku_logic.EMPTY, solution[row][col])
